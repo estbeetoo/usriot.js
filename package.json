@@ -1,0 +1,22 @@
+{
+  "name": "wifiio.js",
+  "version": "1.0.0",
+  "description": "Client lib for USRIOT WiFi IO device",
+  "main": "wifiio.js",
+  "directories": {
+    "example": "example"
+  },
+  "scripts": {
+    "test": "mocha"
+  },
+  "keywords": [
+    "usriot",
+    "wifiio"
+  ],
+  "author": "Alexander Borovsky",
+  "license": "ISC",
+  "devDependencies": {
+    "mocha": "^2.4.5",
+    "should": "^8.2.2"
+  }
+}
