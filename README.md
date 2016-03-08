@@ -16,7 +16,7 @@ connection.connect(function () {
 });
 ```
 
-Look for more examples here: [/examples](/examples)
+Look for more examples here: [/example](/example)
 
 ### Author
 
