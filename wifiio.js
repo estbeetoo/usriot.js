@@ -10,7 +10,7 @@ function WiFiIO(options) {
     this.host = options.host || 'localhost';
     this.port = options.port || 8899;
     this.password = options.password || 'admin';
-    this.debug = options.debug || true; //TODO: change to false
+    this.debug = options.debug || false;
     this.socket = null;
     this.passportSent = false;
 }
