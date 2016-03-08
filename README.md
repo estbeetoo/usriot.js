@@ -30,4 +30,5 @@ Alexander Borovsky, [BeeToo](http://beetoo.me)
 * Add keep-alive and auto reconnect
 
 ### Official Protocol documentation
-http://www.usriot.com/download/LonHand/GPIO%20control%20protocol%20V1.8.pdf
+* http://www.usriot.com/download/LonHand/GPIO%20control%20protocol%20V1.8.pdf
+* http://www.usriot.com/gpio-communication-protocol-v1-8/
