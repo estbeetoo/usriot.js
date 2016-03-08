@@ -1,5 +1,5 @@
 {
-  "name": "wifiio.js",
+  "name": "usriot.js",
   "version": "1.0.0",
   "description": "Client lib for USR IoT WiFi IO device",
   "main": "wifiio.js",
