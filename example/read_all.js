@@ -6,7 +6,10 @@ var WiFiIO = require('../');
 var connection = new WiFiIO(config);
 connection.connect(function () {
     console.log('Connected successfully!');
-    connection.invertAll(function () {
+    connection.readAllIO(function (value, error) {
+        if (error)
+            throw new Error('Cannot read IO status, cause: ' + error);
+        console.log('Status[%s] red', value);
         connection.disconnect();
         process.exit();
     });

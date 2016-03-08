@@ -16,5 +16,7 @@ describe('WiFiIO', function () {
         WiFiIO.prototype.clearAll.should.be.type('function');
         WiFiIO.prototype.openAll.should.be.type('function');
         WiFiIO.prototype.setAll.should.be.type('function');
+        WiFiIO.prototype.readIO.should.be.type('function');
+        WiFiIO.prototype.readAllIO.should.be.type('function');
     });
 });

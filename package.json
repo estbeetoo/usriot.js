@@ -1,6 +1,6 @@
 {
   "name": "usriot.js",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Client lib for USR IoT WiFi IO device",
   "main": "wifiio.js",
   "directories": {
@@ -13,6 +13,8 @@
     "usriot",
     "usr",
     "iot",
+    "gpio",
+    "gpio communication protocol",
     "wifiio"
   ],
   "author": "Alexander Borovsky",

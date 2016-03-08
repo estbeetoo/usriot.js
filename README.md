@@ -28,6 +28,8 @@ Alexander Borovsky, [BeeToo](http://beetoo.me)
 * Add more test suites with mockup device
 * Add response parsing
 * Add keep-alive and auto reconnect
+* Add send queue
+* Implement multiple channels command, such as ```0x07 BBBB select multiple channel clear```
 
 ### Official Protocol documentation
 * http://www.usriot.com/download/LonHand/GPIO%20control%20protocol%20V1.8.pdf

@@ -11,6 +11,7 @@ function WiFiIO(options) {
     this.port = options.port || 8899;
     this.password = options.password || 'admin';
     this.debug = options.debug || false;
+    this.readTimeout = options.readTimeout || 5000;
     this.socket = null;
     this.passportSent = false;
 }
@@ -34,6 +35,8 @@ WiFiIO.prototype.connect = function (callback) {
                 this.disconnect();
             }
         }
+        else
+            this.handleResponse(data);
     }.bind(this));
     this.socket.on('error', function (error) {
         console.log('[%s] Error: ' + JSON.stringify(error), this);
@@ -51,13 +54,96 @@ WiFiIO.prototype.connect = function (callback) {
         this.debug && console.log('[%s] Socket connected', this);
         this.passportSent = true;
         var helloBuf = new Buffer(this.password.length + 2);
-        helloBuf.write('admin');
+        helloBuf.write(this.password);
         helloBuf.writeUInt8(0x0D, this.password.length);
         helloBuf.writeUInt8(0x0A, this.password.length + 1);
         this.socket.write(helloBuf);
     }.bind(this));
 }
 
+WiFiIO.prototype.handleResponse = function (data) {
+    if (data.length == 2) {
+        if (data[0] == 0x7F && data[1] == 0x7F) {
+            this.debug && console.log('Busy');
+            this.emit('busy');
+        }
+        else if (data[0] == 0x00 && data[1] == 0x00) {
+            this.debug && console.log('Device failure');
+            this.emit('error', new Error('Device failure'));
+        }
+    }
+    else {
+        if (data[0] !== 0xAA && data[1] !== 0x55) {
+            this.debug && console.log('Packet header unknown, should be 2 bytes: [0xAA, 0x55]');
+            this.emit('error', new Error('Packet header unknown, should be 2 bytes: [0xAA, 0x55]'));
+        }
+        var length = data[3] - 2;
+
+        var packetEnd = 5 + length + 2;
+
+        var payload = data.slice(5, 5 + length + 1);
+        var parity = data[5 + length + 1];
+
+        if (data.length > packetEnd)
+            data = data.slice(packetEnd, data.length);
+        else
+            data = new Buffer(0);
+
+        var parityCheck = length + 2;
+        for (var i = 0; i < payload.length; i++)
+            parityCheck += payload[i];
+        parityCheck &= 255;
+        if (parityCheck !== parity) {
+            this.debug && console.log('Parity check fail');
+            return this.emit('error', new Error('Parity check fail'));
+        }
+        this.handleCmdResponse(payload[0] - 0x80, payload.slice(1));
+        //If we have remaining non empty data buffer to be handled
+        if (data.length > 0)
+            setImmediate(function () {
+                this.handleResponse(data)
+            }.bind(this));
+    }
+}
+
+WiFiIO.prototype.handleCmdResponse = function (cmd, parameter /*Buffer*/) {
+    switch (cmd) {
+        case 0x01:
+        case 0x02:
+        case 0x03:
+            this.emit('output.' + parameter[0], parameter[1]);
+            break;
+        case 0x04:
+            this.emit('output.all', '000000000000');
+            break;
+        case 0x05:
+            this.emit('output.all', '111111111111');
+            break;
+        case 0x13:
+            break;
+        case 0x14:
+            var status = 0;
+            for (var i = 0; i < parameter.length; i++)
+                status += parameter[i] << i;
+            status = status.toString(2);
+            while (status.length < 12)
+                status = '0' + status;
+            this.emit('input.all', status);
+            break;
+        case 0x06:
+        case 0x0a:
+            var status = 0;
+            for (var i = 0; i < parameter.length; i++)
+                status += parameter[i] << i;
+            status = status.toString(2);
+            while (status.length < 12)
+                status = '0' + status;
+            this.emit('output.all', status);
+            break;
+        default:
+            console.log('[WARN] Cmd[' + cmd.toString(16) + '] is not implemented or unsupported by current device');
+    }
+}
 WiFiIO.prototype.invertIO = function (ioNumber, callback) {
     this.socket.write(this.preparePacketRS232(0x03, parseInt(ioNumber)), callback);
 }
@@ -75,6 +161,26 @@ WiFiIO.prototype.setAll = WiFiIO.prototype.openAll = function (callback) {
 }
 WiFiIO.prototype.invertAll = function (callback) {
     this.socket.write(this.preparePacketRS232(0x06), callback);
+}
+WiFiIO.prototype.readIO = function (ioNumber, callback) {
+    this.socket.write(this.preparePacketRS232(0x13, ioNumber), function () {
+        this.once('input.' + ioNumber.toString(), getReadHandlerFunc(callback, this.readTimeout));
+    }.bind(this));
+}
+WiFiIO.prototype.readAllIO = function (callback) {
+    this.socket.write(this.preparePacketRS232(0x14), function () {
+        this.once('input.all', getReadHandlerFunc(callback, this.readTimeout));
+    }.bind(this));
+}
+
+function getReadHandlerFunc(callback, timeout) {
+    var timeout = setTimeout(function () {
+        callback(null, new Error('Timeout'));
+    }, timeout);
+    return function (value) {
+        clearTimeout(timeout);
+        callback(value);
+    }
 }
 
 WiFiIO.prototype.preparePacketRS232 = function (cmd, parameter) {
