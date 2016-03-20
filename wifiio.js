@@ -140,6 +140,55 @@ WiFiIO.prototype.handleCmdResponse = function (cmd, parameter /*Buffer*/) {
                 status = '0' + status;
             this.emit('output.all', status);
             break;
+        case 0x70:
+            var info = {
+                functions: {
+                    webpage_configurated: false,
+                    resource_number_configurable: false,
+                    wifi: false,
+                    wired: false,
+                    gprs: false,
+                    smartlink: false,
+                    timing_task: false
+                },
+                model: 0,
+                hardware_version: null,
+                software_version: null
+            };
+
+            info.functions.webpage_configurated = (parameter[0] & (1 << 0)) != 0;
+            info.functions.resource_number_configurable = (parameter[0] & (1 << 1)) != 0;
+            info.functions.wifi = (parameter[0] & (1 << 2)) != 0;
+            info.functions.wired = (parameter[0] & (1 << 3)) != 0;
+            info.functions.gprs = (parameter[0] & (1 << 4)) != 0;
+            info.functions.smartlink = (parameter[0] & (1 << 5)) != 0;
+            info.functions.timing_task = (parameter[0] & (1 << 6)) != 0;
+
+            switch (parameter[1]) {
+                case 1:
+                    info.model = 'IOT1';
+                    break;
+                case 2:
+                    info.model = 'WIFI IO MINI';
+                    break;
+                case 3:
+                    info.model = 'GPRS RTU';
+                    break;
+                case 4:
+                    info.model = 'WIFI-IO-83';
+                    break;
+                case 5:
+                    info.model = 'IOT2';
+                    break;
+                default:
+                    info.model = 'unknown[' + parameter[i] + ']';
+            }
+
+            info.hardware_version = 'v' + (parameter[2] & 255) + '.' + (parameter[3] & 255);
+            info.software_version = 'v' + (parameter[4] & 255) + '.' + (parameter[5] & 255);
+
+            this.emit('deviceinfo', info);
+            break;
         default:
             console.log('[WARN] Cmd[' + cmd.toString(16) + '] is not implemented or unsupported by current device');
     }
@@ -170,6 +219,11 @@ WiFiIO.prototype.readIO = function (ioNumber, callback) {
 WiFiIO.prototype.readAllIO = function (callback) {
     this.socket.write(this.preparePacketRS232(0x14), function () {
         this.once('input.all', getReadHandlerFunc(callback, this.readTimeout));
+    }.bind(this));
+}
+WiFiIO.prototype.readDeviceInfo = function (callback) {
+    this.socket.write(this.preparePacketRS232(0x70), function () {
+        this.once('deviceinfo', getReadHandlerFunc(callback, this.readTimeout));
     }.bind(this));
 }
 
