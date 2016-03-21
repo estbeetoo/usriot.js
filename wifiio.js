@@ -122,10 +122,13 @@ WiFiIO.prototype.handleCmdResponse = function (cmd, parameter /*Buffer*/) {
         case 0x13:
             break;
         case 0x14:
-            var status = 0;
+            var oldStatus = 0;
             for (var i = 0; i < parameter.length; i++)
-                status += parameter[i] << i;
-            status = status.toString(2);
+                oldStatus += parameter[i] << i;
+            oldStatus = oldStatus.toString(2);
+            var status = '';
+            for (var i = 0; i < oldStatus.length; i++)
+                status += (parseInt(oldStatus.charAt(i)) & 1).toString();
             while (status.length < 12)
                 status = '0' + status;
             this.emit('input.all', status);
