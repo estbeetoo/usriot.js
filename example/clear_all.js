@@ -6,7 +6,9 @@ var WiFiIO = require('../');
 var connection = new WiFiIO({host: config.host, port: config.port});
 connection.connect(function () {
     console.log('Connected successfully!');
-    connection.clearAll(function () {
+    connection.clearAll(function (error) {
+        if (error)
+            return console.log('Error: %s', error);
         connection.disconnect();
         process.exit();
     });

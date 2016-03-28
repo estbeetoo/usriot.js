@@ -11,9 +11,10 @@ function WiFiIO(options) {
     this.port = options.port || 8899;
     this.password = options.password || 'admin';
     this.debug = options.debug || false;
-    this.readTimeout = options.readTimeout || 5000;
+    this.timeout = options.timeout || 5000;
     this.socket = null;
     this.passportSent = false;
+    this.queue = [];
 }
 util.inherits(WiFiIO, events.EventEmitter);
 
@@ -25,18 +26,7 @@ WiFiIO.prototype.connect = function (callback) {
     this.socket = new net.connect({host: this.host, port: this.port});
     this.socket.on('data', function (data) {
         this.debug && console.log('[%s] received: ' + JSON.stringify(data) + ', string:' + data.toString('ascii'), this);
-        if (this.passportSent) {
-            this.passportSent = false;
-            if (data.toString('ascii') === 'OK') {
-                callback && callback();
-                this.emit('connected');
-            }
-            else {
-                this.disconnect();
-            }
-        }
-        else
-            this.handleResponse(data);
+        this.handleResponse(data);
     }.bind(this));
     this.socket.on('error', function (error) {
         console.log('[%s] Error: ' + JSON.stringify(error), this);
@@ -57,7 +47,28 @@ WiFiIO.prototype.connect = function (callback) {
         helloBuf.write(this.password);
         helloBuf.writeUInt8(0x0D, this.password.length);
         helloBuf.writeUInt8(0x0A, this.password.length + 1);
-        this.socket.write(helloBuf);
+        this._send(helloBuf, function (error, response) {
+            if (error) {
+                error = new Error('Error sending passport, cause: %s', error);
+                this.debug && console.log(error.toString);
+                this.disconnect();
+                return callback && callback(error);
+            }
+            if (!response)
+                return;
+            this.passportSent = false;
+            if (response.toString('ascii') === 'OK') {
+                callback && callback();
+                this.emit('connected');
+            }
+            else {
+                error = new Error('Passport was rejected');
+                this.debug && console.log(error.toString);
+                this.disconnect();
+                return callback && callback(error);
+            }
+        }.bind(this));
+
     }.bind(this));
 }
 
@@ -106,8 +117,8 @@ WiFiIO.prototype.handleResponse = function (data) {
     }
 }
 
-WiFiIO.prototype.handleCmdResponse = function (cmd, parameter /*Buffer*/) {
-    switch (cmd) {
+WiFiIO.prototype.handleCmdResponse = function (packet, parameter /*Buffer*/) {
+    switch (packet) {
         case 0x01:
         case 0x02:
         case 0x03:
@@ -193,54 +204,114 @@ WiFiIO.prototype.handleCmdResponse = function (cmd, parameter /*Buffer*/) {
             this.emit('deviceinfo', info);
             break;
         default:
-            console.log('[WARN] Cmd[' + cmd.toString(16) + '] is not implemented or unsupported by current device');
+            console.log('[WARN] Cmd[' + packet.toString(16) + '] is not implemented or unsupported by current device');
     }
 }
 WiFiIO.prototype.invertIO = function (ioNumber, callback) {
-    this.socket.write(this.preparePacketRS232(0x03, parseInt(ioNumber)), callback);
+    this._send(this._buildPacket(0x03, parseInt(ioNumber)), callback);
 }
 WiFiIO.prototype.openIO = function (ioNumber, callback) {
-    this.socket.write(this.preparePacketRS232(0x02, parseInt(ioNumber)), callback);
+    this._send(this._buildPacket(0x02, parseInt(ioNumber)), callback);
 }
 WiFiIO.prototype.closeIO = function (ioNumber, callback) {
-    this.socket.write(this.preparePacketRS232(0x01, parseInt(ioNumber)), callback);
+    this._send(this._buildPacket(0x01, parseInt(ioNumber)), callback);
 }
 WiFiIO.prototype.clearAll = WiFiIO.prototype.closeAll = function (callback) {
-    this.socket.write(this.preparePacketRS232(0x04), callback);
+    this._send(this._buildPacket(0x04), callback);
 }
 WiFiIO.prototype.setAll = WiFiIO.prototype.openAll = function (callback) {
-    this.socket.write(this.preparePacketRS232(0x05), callback);
+    this._send(this._buildPacket(0x05), callback);
 }
 WiFiIO.prototype.invertAll = function (callback) {
-    this.socket.write(this.preparePacketRS232(0x06), callback);
+    this._send(this._buildPacket(0x06), callback);
 }
 WiFiIO.prototype.readIO = function (ioNumber, callback) {
-    this.socket.write(this.preparePacketRS232(0x13, ioNumber), function () {
-        this.once('input.' + ioNumber.toString(), getReadHandlerFunc(callback, this.readTimeout));
-    }.bind(this));
+    this._send(this._buildPacket(0x13, parseInt(ioNumber)), function () {
+        this.once('input.' + ioNumber.toString(), callback);
+    }.bind(this), callback);
 }
 WiFiIO.prototype.readAllIO = function (callback) {
-    this.socket.write(this.preparePacketRS232(0x14), function () {
-        this.once('input.all', getReadHandlerFunc(callback, this.readTimeout));
-    }.bind(this));
+    this._send(this._buildPacket(0x14), function () {
+        this.once('input.all', callback);
+    }.bind(this), callback);
 }
 WiFiIO.prototype.readDeviceInfo = function (callback) {
-    this.socket.write(this.preparePacketRS232(0x70), function () {
-        this.once('deviceinfo', getReadHandlerFunc(callback, this.readTimeout));
-    }.bind(this));
+    this._send(this._buildPacket(0x70), function () {
+        this.once('deviceinfo', callback);
+    }.bind(this), callback);
 }
 
-function getReadHandlerFunc(callback, timeout) {
-    var timeout = setTimeout(function () {
-        callback(null, new Error('Timeout'));
-    }, timeout);
-    return function (value) {
-        clearTimeout(timeout);
-        callback(value);
+var lastSent = null;
+
+function handleQueue(transport) {
+    stopSendTimeout();
+    var item = transport.queue[0];
+    //If it's true, handleQueue being called twice for same queue state. For sure: it's send timeout. Call callback and schedule next handleQueue
+    if (lastSent && item && lastSent.id === item.id)
+        return item.callbackInner(new Error('Send timeout'), null);
+    if (item !== null && item !== undefined) {
+        transport.debug && console.log('usriot: sending item[%s]', JSON.stringify(item));
+        item.callbackInner = buildCallbackInner(item, transport);
+        lastSent = item;
+        resetSendTimeout(transport);
+        transport.socket.write(item.packet, item.callbackInner.bind(this));
     }
 }
 
-WiFiIO.prototype.preparePacketRS232 = function (cmd, parameter) {
+WiFiIO.prototype._send = function (packet, callback, callbackWithoutEE) {
+    if (packet === '' || packet === null)
+        return callback && callback(new Error('Empty command parameter'));
+    this.queue.push({id: nextId(), packet: packet, callback: callback, callbackWithoutEE: callbackWithoutEE});
+    this.queue.length === 1 && handleQueue(this);
+}
+
+/*
+ Not always telnet-client's socket fire timeout event, when there are no response after command sent
+ That's why one startint timeout timer after each packet sent.
+ */
+var sendTimeout;
+function resetSendTimeout(transport) {
+    sendTimeout = setTimeout(function () {
+        handleQueue(transport);
+    }, transport.timeout || 1500);
+}
+function stopSendTimeout() {
+    clearTimeout(sendTimeout);
+}
+
+var id = 1;
+function nextId() {
+    id++;
+    if (id > 65535)
+        id = 1;
+    return id;
+}
+
+function buildCallbackInner(_item, _transport) {
+    return function (item, transport) {
+        return function (error, response) {
+            transport.debug && console.log('usriot: callbackInner(%s, %s) for item[%s]', JSON.stringify(error), JSON.stringify(response), JSON.stringify(item));
+            stopSendTimeout();
+            if (item.callbackCalled)
+                return false;
+            item.callbackCalled = true;
+            setImmediate(function () {
+                handleQueue(transport);
+            });
+            if (lastSent && lastSent.id === item.id) {
+                transport.debug && console.log('usriot: clearing lastSent');
+                lastSent = null;
+            }
+            transport.queue.shift();
+            if (error && item.callbackWithoutEE)
+                item.callbackWithoutEE && item.callbackWithoutEE(error, response);
+            else
+                item.callback && item.callback(error, response);
+        }
+    }(_item, _transport);
+}
+
+WiFiIO.prototype._buildPacket = function (packet, parameter) {
     var parameterBuf = null;
     if (parameter === null || parameter === undefined) {
         parameter = 0;
@@ -260,25 +331,10 @@ WiFiIO.prototype.preparePacketRS232 = function (cmd, parameter) {
     packet.writeUInt8(0x00, 2);
     packet.writeUInt8(length, 3);
     packet.writeUInt8(0x00, 4);
-    packet.writeUInt8(parseInt(cmd) & 255, 5);
+    packet.writeUInt8(parseInt(packet) & 255, 5);
     for (var i = 0; i < parameterBuf.length; i++)
         packet.writeUInt8(parameterBuf[i], 6 + i);
-    packet.writeUInt8(length + parseInt(cmd) + parameter, 6 + parameterBuf.length);
-    this.debug && console.log('Packet[%s] prepared', JSON.stringify(packet));
-    return packet;
-}
-WiFiIO.prototype.preparePacketIP = function (cmd, parameter) {
-    if (typeof(parameter) !== 'number')
-        throw Error('Expecting parameter of number type');
-
-    var parameterBuf = new Buffer(1);
-    parameterBuf.writeUInt8(parseInt(parameter), 0);
-
-    var packet = new Buffer(1 + parameterBuf.length);
-    packet.writeUInt8(parseInt(cmd) & 255, 0);
-
-    for (var i = 0; i < parameterBuf.length; i++)
-        packet.writeUInt8(parameterBuf[i], 1 + i);
+    packet.writeUInt8(length + parseInt(packet) + parameter, 6 + parameterBuf.length);
     this.debug && console.log('Packet[%s] prepared', JSON.stringify(packet));
     return packet;
 }
