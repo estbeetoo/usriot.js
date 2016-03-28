@@ -3,7 +3,7 @@
  */
 var config = require('./config.js')
 var WiFiIO = require('../');
-var connection = new WiFiIO({host: config.host, port: config.port});
+var connection = new WiFiIO(config);
 connection.connect(function () {
     console.log('Connected successfully!');
     connection.setAll(function () {

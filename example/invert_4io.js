@@ -3,13 +3,14 @@
  */
 var config = require('./config.js')
 var WiFiIO = require('../');
-var connection = new WiFiIO({host: config.host, port: config.port});
+var connection = new WiFiIO(config);
 connection.connect(function (error) {
     if (error)
         return console.log('Error connecting: %s', error);
     connection.invertIO(4, function (error) {
         if (error)
             return console.log('Error inverting: %s', error);
+        console.log('success');
         connection.disconnect();
         process.exit();
     });
