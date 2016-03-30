@@ -7,7 +7,7 @@ var connection = new WiFiIO(config);
 connection.connect(function (error) {
     if (error)
         return console.log('Error connecting: %s', error);
-    connection.invertIO(4, function (error, status) {
+    connection.closeIO(4, function (error, status) {
         if (error)
             return console.log('Error inverting: %s', error);
         console.log('Success, current status: ' + status);

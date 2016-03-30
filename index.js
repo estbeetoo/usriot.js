@@ -121,11 +121,12 @@ WiFiIO.prototype.handleResponse = function (data) {
 }
 
 WiFiIO.prototype.handleCmdResponse = function (packet, parameter /*Buffer*/) {
+    this.lastReceived = new Date().getTime();
     switch (packet) {
         case 0x01:
         case 0x02:
         case 0x03:
-            this.emit('output.' + parameter[0], parameter[1]);
+            this.emit('output.' + parameter[0], parseInt(parameter[1]) & 1);
             break;
         case 0x04:
             this.emit('output.all', '000000000000');
@@ -141,20 +142,23 @@ WiFiIO.prototype.handleCmdResponse = function (packet, parameter /*Buffer*/) {
                 oldStatus += parameter[i] << i;
             oldStatus = oldStatus.toString(2);
             var status = '';
-            for (var i = 0; i < oldStatus.length; i++)
-                status += (parseInt(oldStatus.charAt(i)) & 1).toString();
-            while (status.length < 12)
-                status = '0' + status;
+            for (var i = oldStatus.length - 1; i >= 0; i--)
+                status += (parseInt(oldStatus.charAt(i)) ^ 1).toString();
+            while (status.length < 3)
+                status += '1';
             this.emit('input.all', status);
             break;
         case 0x06:
         case 0x0a:
-            var status = 0;
+            var oldStatus = 0;
             for (var i = 0; i < parameter.length; i++)
-                status += parameter[i] << i;
-            status = status.toString(2);
-            while (status.length < 12)
-                status = '0' + status;
+                oldStatus += parameter[i] << i;
+            oldStatus = oldStatus.toString(2);
+            var status = '';
+            for (var i = oldStatus.length - 1; i >= 0; i--)
+                status += (parseInt(oldStatus.charAt(i)) & 1).toString();
+            while (status.length < 8)
+                status += '0';
             this.emit('output.all', status);
             break;
         case 0x70:
@@ -214,22 +218,22 @@ WiFiIO.prototype.handleCmdResponse = function (packet, parameter /*Buffer*/) {
     }
 }
 WiFiIO.prototype.invertIO = function (ioNumber, callback) {
-    this._send(this._buildPacket(0x03, parseInt(ioNumber)), callback);
+    this._send(this._buildPacket(0x03, parseInt(ioNumber)), callback, 'output.' + parseInt(ioNumber));
 }
 WiFiIO.prototype.openIO = function (ioNumber, callback) {
-    this._send(this._buildPacket(0x02, parseInt(ioNumber)), callback);
+    this._send(this._buildPacket(0x02, parseInt(ioNumber)), callback, 'output.' + parseInt(ioNumber));
 }
 WiFiIO.prototype.closeIO = function (ioNumber, callback) {
-    this._send(this._buildPacket(0x01, parseInt(ioNumber)), callback);
+    this._send(this._buildPacket(0x01, parseInt(ioNumber)), callback, 'output.' + parseInt(ioNumber));
 }
 WiFiIO.prototype.clearAll = WiFiIO.prototype.closeAll = function (callback) {
-    this._send(this._buildPacket(0x04), callback);
+    this._send(this._buildPacket(0x04), callback, 'output.all');
 }
 WiFiIO.prototype.setAll = WiFiIO.prototype.openAll = function (callback) {
-    this._send(this._buildPacket(0x05), callback);
+    this._send(this._buildPacket(0x05), callback, 'output.all');
 }
 WiFiIO.prototype.invertAll = function (callback) {
-    this._send(this._buildPacket(0x06), callback);
+    this._send(this._buildPacket(0x06), callback, 'output.all');
 }
 WiFiIO.prototype.readIO = function (ioNumber, callback) {
     this._send(this._buildPacket(0x13, parseInt(ioNumber)), function (error, response) {
@@ -268,16 +272,22 @@ function handleQueue(transport, timeoutCall) {
         transport.debug && console.log(new Date().toTimeString() + ' usriot: sending item[%s]', JSON.stringify(item));
         lastSent = item;
         resetSendTimeout(transport);
-        if (item.responseLstnr)
-        //TODO: save lstrn func and then detach it
+        if (item.responseLstnr) {
+            //TODO: save lstrn func and then detach it
             transport.once(item.responseLstnr.toString(), function (response) {
                 item.callbackInner(null, response);
             });
-        //TODO: save lstrn func and then detach it
-        transport.once('unsupported', function (response) {
-            item.callbackInner(new Error('Unsupported'), response);
-        });
-        transport.socket.write(item.packet);
+            //TODO: save lstrn func and then detach it
+            transport.once('unsupported', function (response) {
+                item.callbackInner(new Error('Unsupported'), response);
+            });
+            transport.socket.write(item.packet);
+        }
+        else {
+            transport.socket.write(item.packet, function () {
+                setImmediate(item.callbackInner);
+            });
+        }
     }
 }
 

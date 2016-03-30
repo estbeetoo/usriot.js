@@ -25,7 +25,7 @@ Alexander Borovsky, [BeeToo](http://beetoo.me)
 ### TODOs
 
 * Take a look at C# library: [https://github.com/JohnMasen/USRWin](https://github.com/JohnMasen/USRWin)
-* Add more test suites with mockup device
+* Add more test suites with [mockup device](test/mock_device.js)
 * Add response parsing
 * Add keep-alive and auto reconnect
 * Add send queue
