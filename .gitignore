@@ -179,6 +179,4 @@ docs/_build/
 # PyBuilder
 target/
 
-
-
 example/config.js
