@@ -4,15 +4,22 @@
 var config = require('./config.js')
 var WiFiIO = require('../');
 var connection = new WiFiIO(config);
+var assert = require('assert');
 connection.connect(function (error) {
     if (error)
         return console.log('Error connecting: %s', error);
-    connection.invertIO(4, function (error, status) {
+    connection.closeIO(4, function (error, status) {
         if (error)
             return console.log('Error inverting: %s', error);
         console.log('Success, current status: ' + status);
-        connection.disconnect();
-        process.exit();
+        assert.strictEqual(status, 0);
+        connection.invertIO(4, function (error, status) {
+            if (error)
+                return console.log('Error inverting: %s', error);
+            console.log('Success, current status: ' + status);
+            assert.strictEqual(status, 1);
+            connection.disconnect();
+            process.exit();
+        });
     });
-
 });

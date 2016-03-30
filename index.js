@@ -129,10 +129,10 @@ WiFiIO.prototype.handleCmdResponse = function (packet, parameter /*Buffer*/) {
             this.emit('output.' + parameter[0], parseInt(parameter[1]) & 1);
             break;
         case 0x04:
-            this.emit('output.all', '000000000000');
+            this.emit('output.all', '00000000');
             break;
         case 0x05:
-            this.emit('output.all', '111111111111');
+            this.emit('output.all', '11111111');
             break;
         case 0x13:
             break;
@@ -250,10 +250,11 @@ WiFiIO.prototype.readAllIO = function (callback) {
     }.bind(this), 'input.all');
 }
 WiFiIO.prototype.readDeviceInfo = function (callback) {
-    this.once('deviceinfo', function (response) {
+    this._send(this._buildPacket(0x70), function (error, response) {
+        if (error)
+            return callback && callback(error);
         callback && callback(null, response);
-    });
-    this._send(this._buildPacket(0x70), callback);
+    }.bind(this), 'deviceinfo');
 }
 
 var lastSent = null;

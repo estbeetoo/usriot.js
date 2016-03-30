@@ -3,6 +3,7 @@
  */
 var config = require('./config.js')
 var WiFiIO = require('../');
+var assert = require('assert');
 var connection = new WiFiIO(config);
 connection.connect(function (error) {
     if (error)
@@ -11,6 +12,7 @@ connection.connect(function (error) {
         if (error)
             return console.log('Error inverting: %s', error);
         console.log('Success, current status: ' + status);
+        assert.strictEqual(status, 0);
         connection.disconnect();
         process.exit();
     });
