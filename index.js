@@ -135,12 +135,15 @@ USRIoT.prototype.handleCmdResponse = function (packet, parameter /*Buffer*/) {
         case 0x02:
         case 0x03:
             this.emit('output.' + parameter[0], parseInt(parameter[1]) & 1);
+            this.emit('response', {cmd: 'output.' + parameter[0], arg: parseInt(parameter[1]) & 1});
             break;
         case 0x04:
             this.emit('output.all', '00000000');
+            this.emit('response', {cmd: 'output.all', arg: '00000000'});
             break;
         case 0x05:
             this.emit('output.all', '11111111');
+            this.emit('response', {cmd: 'output.all', arg: '11111111'});
             break;
         case 0x13:
             break;
@@ -155,6 +158,7 @@ USRIoT.prototype.handleCmdResponse = function (packet, parameter /*Buffer*/) {
             while (status.length < 3)
                 status += '1';
             this.emit('input.all', status);
+            this.emit('response', {cmd: 'output.all', arg: status});
             break;
         case 0x06:
         case 0x0a:
@@ -168,6 +172,7 @@ USRIoT.prototype.handleCmdResponse = function (packet, parameter /*Buffer*/) {
             while (status.length < 8)
                 status += '0';
             this.emit('output.all', status);
+            this.emit('response', {cmd: 'output.all', arg: status});
             break;
         case 0x70:
             var info = {
@@ -217,6 +222,7 @@ USRIoT.prototype.handleCmdResponse = function (packet, parameter /*Buffer*/) {
             info.software_version = 'v' + (parameter[4] & 255) + '.' + (parameter[5] & 255);
 
             this.emit('deviceinfo', info);
+            this.emit('response', {cmd: 'deviceinfo', arg: info});
             break;
         case 0x7f:
             this.emit('unsupported');
