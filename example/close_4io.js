@@ -2,9 +2,9 @@
  * Created by boba on 08.03.16.
  */
 var config = require('./config.js')
-var WiFiIO = require('../');
+var USRIoT = require('../');
 var assert = require('assert');
-var connection = new WiFiIO(config);
+var connection = new USRIoT(config);
 connection.connect(function (error) {
     if (error)
         return console.log('Error connecting: %s', error);

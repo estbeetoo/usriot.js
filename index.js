@@ -6,34 +6,40 @@ var net = require('net');
 var util = require('util');
 var events = require('events');
 
-function WiFiIO(options) {
+function USRIoT(options) {
     this.host = options.host || 'localhost';
     this.port = options.port || 8899;
     this.password = options.password || 'admin';
     this.debug = options.debug || false;
     this.timeout = options.timeout || 3000;
     this.socket = null;
-    this.passportSent = false;
     this.queue = [];
 }
-util.inherits(WiFiIO, events.EventEmitter);
+util.inherits(USRIoT, events.EventEmitter);
 
-WiFiIO.prototype.toString = function () {
-    return 'WiFiIO[' + this.host + ':' + this.port + ']';
+USRIoT.prototype.toString = function () {
+    return 'USRIoT[' + this.host + ':' + this.port + ']';
 }
 
-WiFiIO.prototype.connect = function (callback) {
+USRIoT.prototype.getConnection = USRIoT.prototype.getSocket = function () {
+    return this.socket;
+}
+
+USRIoT.prototype.connect = function (callback) {
     this.socket = new net.connect({host: this.host, port: this.port});
     this.socket.on('error', function (error) {
         console.log('[%s] Error: ' + JSON.stringify(error), this);
+        this.emit('error');
         this.disconnect();
     }.bind(this));
     this.socket.on('end', function () {
         this.debug && console.log('[%s] Socket ended', this);
+        this.emit('end');
         this.disconnect();
     }.bind(this));
     this.socket.on('close', function () {
         this.debug && console.log('[%s] Socket closed', this);
+        this.emit('close');
         this.disconnect();
     }.bind(this));
     this.socket.on('connect', function () {
@@ -49,8 +55,9 @@ WiFiIO.prototype.connect = function (callback) {
 
         var helloCallback = this._send(helloBuf, function (error, response) {
             if (error) {
-                error = new Error('Error sending passport, cause: ' + error);
+                error = new Error('Error sending password, cause: ' + error);
                 this.debug && console.log(error.toString());
+                this.error('error', error);
                 return callback(error);
             }
             if (response.toString('ascii').indexOf('OK') === 0) {
@@ -59,8 +66,9 @@ WiFiIO.prototype.connect = function (callback) {
                 this.emit('connected');
             }
             else {
-                error = new Error('Passport was rejected');
+                error = new Error('Wrong password');
                 this.debug && console.log(error.toString());
+                this.error('error', error);
                 this.disconnect();
                 callback(error);
             }
@@ -75,7 +83,7 @@ function bindHandleData(transport) {
     }.bind(transport));
 }
 
-WiFiIO.prototype.handleResponse = function (data) {
+USRIoT.prototype.handleResponse = function (data) {
     if (data.length == 2) {
         if (data[0] == 0x7F && data[1] == 0x7F) {
             this.debug && console.log('Busy');
@@ -120,7 +128,7 @@ WiFiIO.prototype.handleResponse = function (data) {
     }
 }
 
-WiFiIO.prototype.handleCmdResponse = function (packet, parameter /*Buffer*/) {
+USRIoT.prototype.handleCmdResponse = function (packet, parameter /*Buffer*/) {
     this.lastReceived = new Date().getTime();
     switch (packet) {
         case 0x01:
@@ -217,39 +225,39 @@ WiFiIO.prototype.handleCmdResponse = function (packet, parameter /*Buffer*/) {
             console.log('[WARN] Cmd[' + packet.toString(16) + '] is not implemented or unsupported by current device');
     }
 }
-WiFiIO.prototype.invertIO = function (ioNumber, callback) {
+USRIoT.prototype.invertIO = function (ioNumber, callback) {
     this._send(this._buildPacket(0x03, parseInt(ioNumber)), callback, 'output.' + parseInt(ioNumber));
 }
-WiFiIO.prototype.openIO = function (ioNumber, callback) {
+USRIoT.prototype.openIO = function (ioNumber, callback) {
     this._send(this._buildPacket(0x02, parseInt(ioNumber)), callback, 'output.' + parseInt(ioNumber));
 }
-WiFiIO.prototype.closeIO = function (ioNumber, callback) {
+USRIoT.prototype.closeIO = function (ioNumber, callback) {
     this._send(this._buildPacket(0x01, parseInt(ioNumber)), callback, 'output.' + parseInt(ioNumber));
 }
-WiFiIO.prototype.clearAll = WiFiIO.prototype.closeAll = function (callback) {
+USRIoT.prototype.clearAll = USRIoT.prototype.closeAll = function (callback) {
     this._send(this._buildPacket(0x04), callback, 'output.all');
 }
-WiFiIO.prototype.setAll = WiFiIO.prototype.openAll = function (callback) {
+USRIoT.prototype.setAll = USRIoT.prototype.openAll = function (callback) {
     this._send(this._buildPacket(0x05), callback, 'output.all');
 }
-WiFiIO.prototype.invertAll = function (callback) {
+USRIoT.prototype.invertAll = function (callback) {
     this._send(this._buildPacket(0x06), callback, 'output.all');
 }
-WiFiIO.prototype.readIO = function (ioNumber, callback) {
+USRIoT.prototype.readIO = function (ioNumber, callback) {
     this._send(this._buildPacket(0x13, parseInt(ioNumber)), function (error, response) {
         if (error)
             return callback && callback(error);
         callback && callback(null, response);
     }.bind(this), 'input.' + ioNumber.toString());
 }
-WiFiIO.prototype.readAllIO = function (callback) {
+USRIoT.prototype.readAllIO = function (callback) {
     this._send(this._buildPacket(0x14), function (error, response) {
         if (error)
             return callback && callback(error);
         callback && callback(null, response);
     }.bind(this), 'input.all');
 }
-WiFiIO.prototype.readDeviceInfo = function (callback) {
+USRIoT.prototype.readDeviceInfo = function (callback) {
     this._send(this._buildPacket(0x70), function (error, response) {
         if (error)
             return callback && callback(error);
@@ -264,8 +272,10 @@ function handleQueue(transport, timeoutCall) {
     var item = transport.queue[0];
     //If it's true, handleQueue being called twice for same queue state. For sure: it's send timeout. Call callback and schedule next handleQueue
     if (lastSent && item && lastSent.id === item.id) {
-        if (timeoutCall)
+        if (timeoutCall) {
+            transport.emit('timeout');
             return item.callbackInner(new Error('Send timeout'), null);
+        }
         else
             return;
     }
@@ -298,7 +308,7 @@ function handleQueue(transport, timeoutCall) {
  @parameter responseLstnr {string}
  @return callback function that should be called in all cases (win or fail)
  */
-WiFiIO.prototype._send = function (packet, callback, responseLstnr) {
+USRIoT.prototype._send = function (packet, callback, responseLstnr) {
     if (packet === '' || packet === null)
         return callback && callback(new Error('Empty command parameter'));
     var item = {id: nextId(), packet: packet, callback: callback, responseLstnr: responseLstnr};
@@ -353,7 +363,7 @@ function buildCallbackInner(_item, _transport) {
     }(_item, _transport);
 }
 
-WiFiIO.prototype._buildPacket = function (cmd, parameter) {
+USRIoT.prototype._buildPacket = function (cmd, parameter) {
     var parameterBuf = null;
     if (parameter === null || parameter === undefined) {
         parameter = 0;
@@ -381,14 +391,13 @@ WiFiIO.prototype._buildPacket = function (cmd, parameter) {
     return packet;
 }
 
-WiFiIO.prototype.disconnect = function () {
-    if (this.socket) {
-        this.emit('disconnected');
-        this.socket.end();
-        this.socket = null;
-    }
-    this.passportSent = false;
+USRIoT.prototype.disconnect = function () {
+    if (!this.socket)
+        return;
+    this.emit('disconnected');
+    this.socket.end();
+    this.socket = null;
 }
 
 
-module.exports = WiFiIO;
+module.exports = USRIoT;

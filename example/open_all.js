@@ -2,8 +2,8 @@
  * Created by boba on 08.03.16.
  */
 var config = require('./config.js')
-var WiFiIO = require('../');
-var connection = new WiFiIO(config);
+var USRIoT = require('../');
+var connection = new USRIoT(config);
 var assert = require('assert');
 connection.connect(function () {
     console.log('Connected successfully!');

@@ -3,7 +3,7 @@
  */
 var should = require('should');
 var WiFiIO = require('../');
-describe('WiFiIO', function () {
+describe('USRIoT', function () {
     it('All appropriate methods fir API should be defined', function () {
         WiFiIO.prototype.connect.should.be.type('function');
         WiFiIO.prototype.disconnect.should.be.type('function');
