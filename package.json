@@ -1,6 +1,6 @@
 {
   "name": "usriot.js",
-  "version": "1.3.3",
+  "version": "1.4.0",
   "description": "Client lib for USR IoT WiFi IO device",
   "main": "index.js",
   "directories": {

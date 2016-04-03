@@ -290,14 +290,10 @@ function handleQueue(transport, timeoutCall) {
         lastSent = item;
         resetSendTimeout(transport);
         if (item.responseLstnr) {
-            //TODO: save lstrn func and then detach it
-            transport.once(item.responseLstnr.toString(), function (response) {
-                item.callbackInner(null, response);
-            });
-            //TODO: save lstrn func and then detach it
-            transport.once('unsupported', function (response) {
-                item.callbackInner(new Error('Unsupported'), response);
-            });
+            item.responseLstrnFunc = getResponseLstrnFunc(item);
+            transport.once(item.responseLstnr.toString(), item.responseLstrnFunc);
+            item.unsupportedLstrnFunc = getUnsupportedLstrnFunc(item);
+            transport.once('unsupported', item.unsupportedLstrnFunc);
             transport.socket.write(item.packet);
         }
         else {
@@ -306,6 +302,22 @@ function handleQueue(transport, timeoutCall) {
             });
         }
     }
+}
+
+function getResponseLstrnFunc(_item) {
+    return function (item) {
+        return function (response) {
+            item.callbackInner(null, response);
+        }
+    }(_item);
+}
+
+function getUnsupportedLstrnFunc(_item) {
+    return function (item) {
+        return function (response) {
+            item.callbackInner(new Error('Unsupported'), response);
+        }
+    }(_item);
 }
 
 /*
@@ -353,6 +365,8 @@ function buildCallbackInner(_item, _transport) {
         return function (error, response) {
             transport.debug && console.log(new Date().toTimeString() + ' usriot: callbackInner(err[%s], response[%s]) for item[%s]', JSON.stringify(error), JSON.stringify(response), JSON.stringify(item));
             stopSendTimeout();
+            transport.removeListener(item.responseLstnr.toString(), item.responseLstrnFunc);
+            transport.removeListener('unsupported', item.unsupportedLstrnFunc);
             if (item.callbackCalled)
                 return false;
             item.callbackCalled = true;

@@ -36,50 +36,37 @@ function tryFunc(callback) {
             console.log('Error occured: %s', error);
         }
 
-        connection.clearAll(function (error, result) {
-            if (error)
-                return console.log('Error: %s', error);
-            assert.strictEqual(result, '00000000');
-            openIO(3).
-            then(function (response3) {
-                assert.strictEqual(response3, 1);
-                openIO(4).then(function (response4) {
-                    assert.strictEqual(response4, 1);
-                }, err);
-            }, err).
-            then(function () {
-                openIO(5).
-                then(function (response) {
+        openIO(3).
+        then(function (response3) {
+            assert.strictEqual(response3, 1);
+            openIO(4).then(function (response4) {
+                assert.strictEqual(response4, 1);
+            }, err);
+        }, err).
+        then(function () {
+            openIO(5).
+            then(function (response) {
+                assert.strictEqual(response, 1);
+            }, err).then(function () {
+                openIO(6).then(function (response) {
                     assert.strictEqual(response, 1);
-                }, err).then(function () {
-                    openIO(6).then(function (response) {
-                        assert.strictEqual(response, 1);
-                        closeIO(3).then(function (response) {
-                            assert.strictEqual(response, 0);
-                        });
-                        closeIO(4).then(function (response) {
-                            assert.strictEqual(response, 0);
-                        });
-                        closeIO(5).then(function (response) {
-                            assert.strictEqual(response, 0);
-                        });
-                        closeIO(6).then(function (response) {
-                            assert.strictEqual(response, 0);
-                            connection.invertAll(function (error, invert_result) {
-                                if (error)
-                                    return console.log('Error inverting: %s', error);
-                                console.log('Invert done! Result: ' + invert_result);
-                                if (invert_result === '11111111') {
-                                    connection.disconnect();
-                                    process.exit();
-                                    return;
-                                }
-                                connection.once('intput.all', function (data) {
-                                    assert.strictEqual(invert_result, '11111111');
-                                    connection.disconnect();
-                                    callback();
-                                });
-                            });
+                    closeIO(3).then(function (response) {
+                        assert.strictEqual(response, 0);
+                    });
+                    closeIO(4).then(function (response) {
+                        assert.strictEqual(response, 0);
+                    });
+                    closeIO(5).then(function (response) {
+                        assert.strictEqual(response, 0);
+                    });
+                    closeIO(6).then(function (response) {
+                        assert.strictEqual(response, 0);
+                        connection.readAllIO(function (error, invert_result) {
+                            if (error)
+                                return console.log('Error inverting: %s', error);
+                            console.log('ReadAllIO done! Result: ' + invert_result);
+                            connection.disconnect();
+                            process.exit();
                         });
                     });
                 });
@@ -88,6 +75,6 @@ function tryFunc(callback) {
     });
 }
 
-tryFunc(function(){
+tryFunc(function () {
     tryFunc();
 });
